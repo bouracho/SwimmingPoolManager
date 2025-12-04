@@ -3,7 +3,10 @@ CONF_WATER_TEMP = "water_temperature_entity"
 CONF_PUMP_SWITCH = "pump_switch_entity"
 CONF_PIVOT_TIME = "pivot_time"
 CONF_CUT_DURATION = "cut_duration"
-CONF_ANTI_FREEZE_TEMP = "anti_freeze_temperature"
 CONF_BREAK_DURATION = "break_duration"
+CONF_ANTI_FREEZE_TEMP = "anti_freeze_temperature"
+CONF_ROBOT_ENABLED = "robot_enabled"
+CONF_ROBOT_SWITCH = "robot_switch"
+
 
 MODES = ["ete", "hiver", "continu", "off"]
