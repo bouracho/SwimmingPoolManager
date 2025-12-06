@@ -37,3 +37,12 @@ class PoolManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         })
 
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def async_step_robot(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            self._data.update(user_input)
+            return self.async_create_entry(title="Swimming Pool Manager", data=self._data)
+        schema = vol.Schema({vol.Required(CONF_ROBOT_SWITCH): EntitySelector(EntitySelectorConfig(domain=["switch"])),})
+
+        return self.async_show_form(step_id="robot", data_schema=schema, errors=errors)(step_id="user", data_schema=schema, errors=errors)
