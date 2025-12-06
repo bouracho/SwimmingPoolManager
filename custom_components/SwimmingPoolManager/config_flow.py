@@ -20,7 +20,7 @@ class PoolManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             LOGGER.debug("config_flow user input: %s", user_input)
             self._data.update(user_input)
             # If robot enabled, robot switch may be provided or asked in next step
-            return self.async_create_entry(title="Pool Manager", data=self._data)
+            return self.async_create_entry(title="Swimming Pool Manager", data=self._data)
 
         schema = vol.Schema({
             vol.Required(CONF_WATER_TEMP): EntitySelector(EntitySelectorConfig(domain=["sensor"])),
