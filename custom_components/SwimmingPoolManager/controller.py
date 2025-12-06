@@ -1,181 +1,128 @@
-"""Main controller logic for Pool management."""
+"""Controller that coordinates schedule, frost protection and updates."""
 import logging
-from datetime import datetime, timedelta, time
-from typing import Optional
-from homeassistant.core import HomeAssistant
+from datetime import datetime
 from homeassistant.helpers.event import async_track_time_change, async_call_later
-from homeassistant.const import STATE_ON, STATE_OFF
-from .const import MODES, CONF_ROBOT_ENABLED, CONF_ROBOT_SWITCH
+from .calculation import compute_filtration_duration_cubic, compute_schedule_windows, check_frost_protection
 
 LOGGER = logging.getLogger(__name__)
 
-# Curve-based model (example): mapping temperature ranges to hours
-def compute_filtration_curve(temp: float) -> float:
-    """Return filtration duration in hours according to a curve model."""
-    try:
-        if temp is None:
-            return 0.0
-        t = float(temp)
-        if t <= 10:
-            return 2.0
-        if t <= 15:
-            return 4.0
-        if t <= 20:
-            return 6.0
-        if t <= 25:
-            return 8.0
-        if t <= 30:
-            return 10.0
-        return 12.0
-    except Exception:  # defensive
-        LOGGER.exception("Error computing filtration curve")
-        return 0.0
-
 class PoolController:
-    def __init__(self, hass: HomeAssistant, cfg: dict, entry_id: str):
+    def __init__(self, hass, config: dict, entry_id: str):
         self.hass = hass
         self.entry_id = entry_id
-        self.temp_entity = cfg.get('water_temperature_entity')
-        self.pump_entity = cfg.get('pump_switch_entity')
-        self.pivot_time = time.fromisoformat(cfg.get('pivot_time'))
-        self.cut_duration = int(cfg.get('cut_duration'))
-        self.break_duration_minutes = int(cfg.get('break_duration', 0))
-        self.anti_freeze_temp = float(cfg.get('anti_freeze_temperature'))
-        self.robot_enabled = cfg.get(CONF_ROBOT_ENABLED, False)
-        self.robot_switch = cfg.get(CONF_ROBOT_SWITCH)
+        self.config = config
         self.mode = 'ete'
-        self._scheduled_handles = []
-
-        LOGGER.debug("PoolController(%s) init: temp=%s pump=%s pivot=%s", entry_id, self.temp_entity, self.pump_entity, self.pivot_time)
+        self._scheduled = []
+        self.data = { 'filtration_active': False, 'mode': None }
 
     async def initialize(self):
-        # Register daily pivot trigger
-        async_track_time_change(self.hass, self.handle_pivot, hour=self.pivot_time.hour, minute=self.pivot_time.minute, second=0)
-        LOGGER.info("PoolController(%s) initialized: pivot %s", self.entry_id, self.pivot_time)
-        # Evaluate immediately once at startup
-        await self.handle_pivot(datetime.now())
+        pivot = self.config.get('pivot_hour')
+        if pivot:
+            h, m = pivot.split(':') if ':' in pivot else (pivot, '00')
+            async_track_time_change(self.hass, self._handle_pivot, hour=int(h), minute=int(m), second=0)
+        LOGGER.info("PoolController(%s) initialized", self.entry_id)
+        await self._handle_pivot(datetime.now())
 
     async def shutdown(self):
-        # cancel scheduled handles
-        for h in self._scheduled_handles:
-            try:
-                h()
-            except Exception:
-                pass
-        self._scheduled_handles.clear()
-        LOGGER.info("PoolController(%s) shutdown", self.entry_id)
-
-    async def async_set_mode(self, mode: str):
-        LOGGER.info("PoolController(%s) set_mode %s", self.entry_id, mode)
-        if mode in MODES:
-            self.mode = mode
-        else:
-            LOGGER.warning("Unknown mode requested: %s", mode)
-
-    def _get_temp(self) -> Optional[float]:
-        state = self.hass.states.get(self.temp_entity)
-        try:
-            return float(state.state) if state else None
-        except Exception:
-            LOGGER.exception("Failed to read temperature from %s", self.temp_entity)
-            return None
-
-    async def handle_pivot(self, now):
-        LOGGER.debug("handle_pivot called at %s", now)
-        temp = self._get_temp()
-        if temp is None:
-            LOGGER.warning("No temperature available, aborting pivot handling")
-            return
-
-        # Cancel previous scheduled actions
-        for cancel in self._scheduled_handles:
+        for cancel in self._scheduled:
             try:
                 cancel()
             except Exception:
                 pass
-        self._scheduled_handles = []
+        self._scheduled.clear()
 
-        # Mode handling
+    async def async_set_mode(self, mode: str):
+        LOGGER.info("Set mode %s", mode)
+        self.mode = mode
+        await self._handle_pivot(datetime.now())
+
+    def update_config(self, key, value):
+        LOGGER.info("Update config %s=%s", key, value)
+        self.config[key] = value
+
+    async def _handle_pivot(self, now):
+        LOGGER.debug("Handle pivot at %s", now)
+        # clear previous schedules
+        for c in self._scheduled:
+            try:
+                c()
+            except Exception:
+                pass
+        self._scheduled.clear()
+
+        # read temps
+        temp_state = self.hass.states.get(self.config.get('water_temp_sensor'))
+        outdoor_state = self.hass.states.get(self.config.get('outdoor_temp_entity'))
+        try:
+            temp = float(temp_state.state) if temp_state else None
+        except Exception:
+            temp = None
+        try:
+            outdoor = float(outdoor_state.state) if outdoor_state else None
+        except Exception:
+            outdoor = None
+
+        # Frost protection
+        if check_frost_protection(outdoor, self.config.get('no_frost_temperature', 0.0)):
+            LOGGER.warning("Frost protection active - forcing pump ON")
+            self.data['filtration_active'] = True
+            self.data['mode'] = 'frost'
+            # schedule remains until temp above threshold — implement periodic re-check
+            return
+
+        # respect modes
         if self.mode == 'off':
-            LOGGER.info("Mode off — ensuring pump off")
-            await self._turn_off()
+            self.data['filtration_active'] = False
+            self.data['mode'] = 'off'
             return
-
         if self.mode == 'continu':
-            LOGGER.info("Mode continu — ensuring pump on")
-            await self._turn_on()
+            self.data['filtration_active'] = True
+            self.data['mode'] = 'continu'
             return
-
-        # Anti-freeze has the highest priority
-        if temp <= self.anti_freeze_temp:
-            LOGGER.info("Anti-freeze triggered (temp=%s <= %s) — turning pump on", temp, self.anti_freeze_temp)
-            await self._turn_on()
-            return
-
         if self.mode == 'hiver':
-            LOGGER.info("Mode hiver — running a short cycle of %s minutes", self.cut_duration)
-            await self._turn_on()
-            # schedule off after cut_duration minutes
-            handle = async_call_later(self.hass, self.cut_duration * 60, self._turn_off)
-            self._scheduled_handles.append(handle)
+            # run short cycle
+            self.data['filtration_active'] = True
+            self.data['mode'] = 'hiver'
+            # schedule off after cut_duration
+            handle = async_call_later(self.hass, int(self.config.get('cut_duration_minutes',60))*60, self._end_hiver)
+            self._scheduled.append(handle)
             return
 
-        # ete: compute curve-based duration and split symmetrically around pivot with a break
-        total_hours = compute_filtration_curve(temp)
-        LOGGER.debug("Temp=%s => total_hours=%s", temp, total_hours)
-        half_hours = total_hours / 2.0
+        # ete: compute duration and schedule two windows
+        if temp is None:
+            LOGGER.warning("No water temperature available")
+            return
+        coef = int(self.config.get('adjust_coeff_pct',100))
+        total_hours = compute_filtration_duration_cubic(temp, coef)
+        windows = compute_schedule_windows(self.config.get('pivot_hour'), int(self.config.get('pause_minutes',0)), total_hours)
 
-        # compute datetimes
-        pivot_dt = datetime.combine(datetime.now().date(), self.pivot_time)
-        half_td = timedelta(hours=half_hours)
-        break_td = timedelta(minutes=self.break_duration_minutes)
+        self.data['filtration_active'] = False
+        self.data['mode'] = 'ete'
+        self.data['schedule_windows'] = windows
 
-        start1 = pivot_dt - half_td - timedelta(seconds=0)
-        end1 = pivot_dt - break_td/2 if self.break_duration_minutes else pivot_dt
+        # schedule actions
+        now_dt = datetime.now()
+        for start, end in windows:
+            if start <= now_dt <= end:
+                # turn on until end
+                await self.hass.services.async_call('switch','turn_on',{'entity_id': self.config.get('pump_switch')})
+                handle = async_call_later(self.hass, (end - now_dt).total_seconds(), self._turn_off_pump)
+                self._scheduled.append(handle)
+                self.data['filtration_active'] = True
+            elif now_dt < start:
+                # schedule on/off
+                handle_on = async_call_later(self.hass, (start - now_dt).total_seconds(), self._turn_on_pump)
+                handle_off = async_call_later(self.hass, (end - now_dt).total_seconds(), self._turn_off_pump)
+                self._scheduled.extend([handle_on, handle_off])
 
-        # per user request: pivot is not a start point; we center around pivot and insert a break
-        # start1 .. end1  then start2 = end1 + break_duration then end2 = start2 + half_hours
-        end1 = pivot_dt - timedelta(minutes=self.break_duration_minutes/2) if self.break_duration_minutes else pivot_dt
-        start2 = pivot_dt + timedelta(minutes=self.break_duration_minutes/2) if self.break_duration_minutes else pivot_dt
-        end2 = start2 + half_td
+    async def _turn_on_pump(self, *_):
+        await self.hass.services.async_call('switch','turn_on',{'entity_id': self.config.get('pump_switch')})
+        self.data['filtration_active'] = True
 
-        LOGGER.debug("Scheduling blocks: %s->%s and %s->%s", start1, end1, start2, end2)
+    async def _turn_off_pump(self, *_):
+        await self.hass.services.async_call('switch','turn_off',{'entity_id': self.config.get('pump_switch')})
+        self.data['filtration_active'] = False
 
-        # Schedule block 1
-        await self._schedule_block(start1, end1)
-        # Schedule block 2
-        await self._schedule_block(start2, end2)
-
-        # Optionally schedule robot after filtration if enabled
-        if self.robot_enabled and self.robot_switch:
-            # schedule robot run after end2
-            async def start_robot(_):
-                LOGGER.info("Starting robot %s", self.robot_switch)
-                await self.hass.services.async_call('switch', 'turn_on', {'entity_id': self.robot_switch})
-            handle = async_call_later(self.hass, (end2 - datetime.now()).total_seconds(), start_robot)
-            self._scheduled_handles.append(handle)
-
-    async def _schedule_block(self, start_dt: datetime, end_dt: datetime):
-        now = datetime.now()
-        # if already in the block, start now and stop at end
-        if start_dt <= now <= end_dt:
-            LOGGER.info("We are inside block [%s - %s], turning pump on until %s", start_dt, end_dt)
-            await self._turn_on()
-            handle = async_call_later(self.hass, (end_dt - now).total_seconds(), self._turn_off)
-            self._scheduled_handles.append(handle)
-        elif now < start_dt:
-            # schedule turn_on at start_dt
-            LOGGER.info("Scheduling pump on at %s and off at %s", start_dt, end_dt)
-            handle_on = async_call_later(self.hass, (start_dt - now).total_seconds(), self._turn_on)
-            handle_off = async_call_later(self.hass, (end_dt - now).total_seconds(), self._turn_off)
-            self._scheduled_handles.extend([handle_on, handle_off])
-        else:
-            LOGGER.debug("Block %s-%s is in the past", start_dt, end_dt)
-
-    async def _turn_on(self, *_):
-        LOGGER.info("Turning pump on: %s", self.pump_entity)
-        await self.hass.services.async_call('switch', 'turn_on', {'entity_id': self.pump_entity})
-
-    async def _turn_off(self, *_):
-        LOGGER.info("Turning pump off: %s", self.pump_entity)
-        await self.hass.services.async_call('switch', 'turn_off', {'entity_id': self.pump_entity})
+    async def _end_hiver(self, *_):
+        await self._turn_off_pump()
+        self.data['mode'] = 'ete'
