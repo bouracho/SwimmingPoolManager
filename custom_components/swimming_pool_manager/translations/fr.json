@@ -1,0 +1,47 @@
+{
+  "title": "Swimming Pool Manager",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuration générale",
+        "description": "Configurez les paramètres essentiels de votre piscine.",
+        "data": {
+          "pool_name": "Nom de la piscine",
+          "pool_switch_entity": "Entité switch de la pompe",
+          "external_temperature_entity": "Capteur de température extérieure",
+          "no_frost_temperature": "Température minimum anti-gel",
+          "robot_enabled": "Activer la gestion du robot"
+        }
+      },
+      "robot": {
+        "title": "Configuration du robot",
+        "description": "Configurez l'entité contrôlant le robot de nettoyage.",
+        "data": {
+          "robot_switch_entity": "Entité switch du robot"
+        }
+      }
+    },
+    "error": {
+      "invalid_entity": "L'entité fournie n'est pas valide.",
+      "robot_requires_switch": "Vous devez sélectionner une entité switch si le robot est activé."
+    },
+    "abort": {
+      "already_configured": "Cette piscine est déjà configurée."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options – Swimming Pool Manager",
+        "description": "Modifiez la configuration de la piscine.",
+        "data": {
+          "no_frost_temperature": "Température minimum anti-gel",
+          "robot_enabled": "Activer le robot",
+          "robot_switch_entity": "Entité switch du robot",
+          "daily_start_time": "Heure d'allumage quotidienne",
+          "daily_stop_time": "Heure d'arrêt quotidienne"
+        }
+      }
+    }
+  }
+}

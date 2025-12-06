@@ -1,0 +1,50 @@
+{
+  "title": "Swimming Pool Manager",
+  "config": {
+    "step": {
+      "user": {
+        "title": "General Configuration",
+        "description": "Configure the essential parameters of your pool.",
+        "data": {
+          "pool_name": "Pool Name",
+          "water_temp_sensor": "Water Temperature Sensor",
+          "pump_switch": "Pool Pump Switch",
+          "external_temperature_entity": "Outdoor Temperature Sensor",
+          "no_frost_temperature": "No Frost Temperature",
+          "robot_enabled": "Enable Robot"
+        }
+      },
+      "robot": {
+        "title": "Robot Configuration",
+        "description": "Configure the entity controlling the cleaning robot.",
+        "data": {
+          "robot_switch": "Robot Switch Entity"
+        }
+      }
+    },
+    "error": {
+      "invalid_entity": "The provided entity is invalid.",
+      "robot_requires_switch": "You must select a switch entity if the robot is enabled."
+    },
+    "abort": {
+      "already_configured": "This pool is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options – Swimming Pool Manager",
+        "description": "Modify the pool configuration.",
+        "data": {
+          "no_frost_temperature": "No Frost Temperature",
+          "robot_enabled": "Enable Robot",
+          "robot_switch": "Robot Switch Entity",
+          "pivot_hour": "Pivot Hour",
+          "pause_minutes": "Pause Duration (minutes)",
+          "cut_duration_minutes": "Cut Duration (minutes)",
+          "adjust_coeff_pct": "Adjustment Coefficient (%)"
+        }
+      }
+    }
+  }
+}
