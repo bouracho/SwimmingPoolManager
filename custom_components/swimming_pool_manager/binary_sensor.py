@@ -1,6 +1,7 @@
 """Binary sensors: filtration_active and frost_protection_active"""
 import logging
 from homeassistant.components.binary_sensor import BinarySensorEntity
+from .const import DOMAIN
 
 LOGGER = logging.getLogger(__name__)
 

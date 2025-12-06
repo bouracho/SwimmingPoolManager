@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from homeassistant.helpers.event import async_track_time_change, async_call_later
 from .calculation import compute_filtration_duration_cubic, compute_schedule_windows, check_frost_protection
+from .const import DOMAIN
 
 LOGGER = logging.getLogger(__name__)
 

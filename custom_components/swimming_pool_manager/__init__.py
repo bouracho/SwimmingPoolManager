@@ -1,4 +1,4 @@
-"""Pool Manager integration init."""
+"""Swimming Pool Manager integration init."""
 import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -8,7 +8,7 @@ from .controller import PoolController
 LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    LOGGER.info("Setting up Pool Manager entry %s", entry.entry_id)
+    LOGGER.info("Setting up Swimming Pool Manager entry %s", entry.entry_id)
 
     hass.data.setdefault(DOMAIN, {})
     controller = PoolController(hass, entry.data, entry.entry_id)
@@ -29,7 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    LOGGER.info("Unloading Pool Manager entry %s", entry.entry_id)
+    LOGGER.info("Unloading Swimming Pool Manager entry %s", entry.entry_id)
     for platform in ["sensor","switch","binary_sensor","number","select"]:
         await hass.config_entries.async_forward_entry_unload(entry, platform)
 

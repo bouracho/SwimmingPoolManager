@@ -1,4 +1,4 @@
-"""Config flow for Pool Manager."""
+"""Config flow for Swimming Pool Manager."""
 from __future__ import annotations
 import logging
 import voluptuous as vol
@@ -8,7 +8,7 @@ from .const import DOMAIN, CONF_WATER_TEMP, CONF_PUMP_SWITCH, CONF_PIVOT_HOUR, C
 
 LOGGER = logging.getLogger(__name__)
 
-class PoolManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class swimming_pool_managerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
@@ -19,7 +19,12 @@ class PoolManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             LOGGER.debug("config_flow user input: %s", user_input)
             self._data.update(user_input)
-            # If robot enabled, robot switch may be provided or asked in next step
+
+            # If robot enabled → go to next step to choose robot switch
+            if self._data.get(CONF_ROBOT_ENABLED):
+                return await self.async_step_robot()
+
+            # Otherwise finish
             return self.async_create_entry(title="Swimming Pool Manager", data=self._data)
 
         schema = vol.Schema({
@@ -29,9 +34,7 @@ class PoolManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(CONF_PIVOT_HOUR): str,
             vol.Required(CONF_PAUSE_MINUTES, default=0): int,
             vol.Required(CONF_CUT_DURATION_MIN, default=60): int,
-            vol.Required(CONF_ANTI_FREEZE_TEMP, default=2.0): float,
             vol.Optional(CONF_ROBOT_ENABLED, default=False): bool,
-            vol.Optional(CONF_ROBOT_SWITCH): EntitySelector(EntitySelectorConfig(domain=["switch"])),
             vol.Optional(CONF_ADJUST_COEFF, default=100): vol.All(int, vol.Range(min=10, max=100)),
             vol.Required(CONF_NO_FROST_TEMP, default=0.0): float,
         })
@@ -43,6 +46,9 @@ class PoolManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._data.update(user_input)
             return self.async_create_entry(title="Swimming Pool Manager", data=self._data)
-        schema = vol.Schema({vol.Required(CONF_ROBOT_SWITCH): EntitySelector(EntitySelectorConfig(domain=["switch"])),})
 
-        return self.async_show_form(step_id="robot", data_schema=schema, errors=errors)(step_id="user", data_schema=schema, errors=errors)
+        schema = vol.Schema({
+            vol.Required(CONF_ROBOT_SWITCH): EntitySelector(EntitySelectorConfig(domain=["switch"])),
+        })
+
+        return self.async_show_form(step_id="robot", data_schema=schema, errors=errors)

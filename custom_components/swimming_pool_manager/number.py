@@ -2,7 +2,7 @@
 import logging
 from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.entity_platform import async_get_current_platform
-from .const import CONF_ADJUST_COEFF, CONF_PAUSE_MINUTES, CONF_CUT_DURATION_MIN, CONF_ANTI_FREEZE_TEMP
+from .const import CONF_ADJUST_COEFF, CONF_PAUSE_MINUTES, CONF_CUT_DURATION_MIN, CONF_ANTI_FREEZE_TEMP, DOMAIN
 
 LOGGER = logging.getLogger(__name__)
 

@@ -1,6 +1,7 @@
 """Pump and robot switch entities — rely on controller scheduling."""
 import logging
 from homeassistant.components.switch import SwitchEntity
+from .const import DOMAIN
 
 LOGGER = logging.getLogger(__name__)
 
